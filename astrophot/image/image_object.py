@@ -46,6 +46,7 @@ class Image(object):
         identity: str = None,
         state: Optional[dict] = None,
         fits_state: Optional[dict] = None,
+        bins: Optional[torch.tensor] = None,
         **kwargs: Any,
     ) -> None:
         """Initialize an instance of the APImage class.
@@ -70,7 +71,8 @@ class Image(object):
             The origin of the image in the coordinate system, as a 1D array of length 2. Default is None.
         center : numpy.ndarray or None, optional
             The center of the image in the coordinate system, as a 1D array of length 2. Default is None.
-
+        bins : numpy.ndarray or None, optional
+            A segmentation map for the image, indicating how pixels have been binned. Default is None.
         Returns:
         --------
         None
@@ -119,6 +121,9 @@ class Image(object):
                 self.data = data
 
             self.to()
+
+        if bins is not None:
+            self.bins = bins
 
         # # Check that image data and header are in agreement (this requires talk back from GPU to CPU so is only used for testing)
         # assert np.all(np.flip(np.array(self.data.shape)[:2]) == self.window.pixel_shape.numpy()), f"data shape {np.flip(np.array(self.data.shape)[:2])}, window shape {self.window.pixel_shape.numpy()}"
@@ -263,6 +268,128 @@ class Image(object):
         else:
             self._data = torch.as_tensor(data, dtype=AP_config.ap_dtype, device=AP_config.ap_device)
 
+    @property
+    def data(self) -> torch.Tensor:
+        """
+        Returns the image data.
+        """
+        return self._data
+
+    @data.setter
+    def data(self, data) -> None:
+        """Set the image data."""
+        self.set_data(data)
+
+    def set_data(self, data: Union[torch.Tensor, np.ndarray], require_shape: bool = True):
+        """
+        Set the image data.
+
+        Args:
+            data (torch.Tensor or numpy.ndarray): The image data.
+            require_shape (bool): Whether to check that the shape of the data is the same as the current data.
+
+        Raises:
+            SpecificationConflict: If `require_shape` is `True` and the shape of the data is different from the current data.
+        """
+        if self._data is not None and require_shape and data.shape != self._data.shape:
+            raise SpecificationConflict(
+                f"Attempting to change image data with tensor that has a different shape! ({data.shape} vs {self._data.shape}) Use 'require_shape = False' if this is desired behaviour."
+            )
+
+        if data is None:
+            self.data = torch.tensor((), dtype=AP_config.ap_dtype, device=AP_config.ap_device)
+        elif isinstance(data, torch.Tensor):
+            self._data = data.to(dtype=AP_config.ap_dtype, device=AP_config.ap_device)
+        else:
+            self._data = torch.as_tensor(data, dtype=AP_config.ap_dtype, device=AP_config.ap_device)
+
+    @property
+    def bins(self):
+        """The bins map indicates the segmentation of the image into bins.
+        Each bin should be treated as a single data point, with value equal
+        to the mean over the bin.
+
+        If no bins are provided, all pixels are treated individually.
+
+        Bins with negative ids are ignored.
+
+        """
+        if self.has_bins:
+            return self._bins
+        raise AttributeError("This image does not have bins")
+
+    @bins.setter
+    def bins(self, bins):
+        self.set_bins(bins)
+
+    @property
+    def has_bins(self):
+        """
+        Single boolean to indicate if a bins map has been provided by the user.
+        """
+        try:
+            return self._bins is not None
+        except AttributeError:
+            return False
+
+    def set_bins(self, bins):
+        """
+        Set the bins map, which indicates how to combine pixels into individual data points.
+        """
+        if bins is None:
+            self._bins = None
+            return
+        if bins.shape != self.data.shape:
+            raise SpecificationConflict(
+                f"bins map must have same shape as data ({bins.shape} vs {self.data.shape})"
+            )
+        if isinstance(bins, torch.Tensor):
+            bins = torch.nan_to_num(bins, nan=-1).to(torch.int)
+            self._bin_ids = torch.unique(bins)
+            self._bins = bins.to(dtype=torch.int, device=AP_config.ap_device)
+        else:
+            bins = np.nan_to_num(bins, nan=-1).astype(int)
+            self._bin_ids = np.unique(bins)
+            self._bins = torch.as_tensor(bins, dtype=torch.int, device=AP_config.ap_device)
+        self._bin_ids = self._bin_ids[self._bin_ids >= 0]
+
+    @property
+    def binned_data(self):
+        """The data binned using the bins map, if it exists"""
+        if self.has_bins:
+            return self._binned_data()
+        raise AttributeError("This image does not have bins")
+
+    def _binned_data(self):
+        binned = []
+        for bin_id in self._bin_ids:
+            if bin_id >= 0:
+                bin_mask = self._bins == bin_id
+                bin_value = torch.sum(self._data * bin_mask, dim=(0,1)) / torch.sum(bin_mask, dim=(0,1))
+                binned.append(bin_value)
+        return torch.stack(binned)
+
+    @property
+    def unbinned_data(self):
+        """The data binned using the bins map, if it exists, then unbinned back to a 2D image"""
+        if self.has_bins:
+            return self._unbinned_data()
+        raise AttributeError("This image does not have bins")
+
+    def _unbinned_data(self):
+        return self._unbin(self.binned_data)
+
+    def _unbin(self, binned_data):
+        unbinned = torch.zeros_like(self.data)
+        for bin_id in self._bin_ids:
+            if bin_id >= 0:
+                bin_mask = self._bins == bin_id
+                bin_value = binned_data[bin_id]
+                unbinned += bin_mask * bin_value
+        bin_mask = self._bins >= 0
+        unbinned = unbinned.where(bin_mask, torch.nan)
+        return unbinned
+
     def copy(self, **kwargs):
         """Produce a copy of this image with all of the same properties. This
         can be used when one wishes to make temporary modifications to
@@ -288,9 +415,11 @@ class Image(object):
 
     def get_window(self, window, **kwargs):
         """Get a sub-region of the image as defined by a window on the sky."""
+        indices = self.window.get_self_indices(window)
         return self.__class__(
-            data=self.data[self.window.get_self_indices(window)],
+            data=self.data[indices],
             header=self.header.get_window(window, **kwargs),
+            bins=self.bins[indices] if self.has_bins else None,
             **kwargs,
         )
 

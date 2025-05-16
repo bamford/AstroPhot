@@ -268,6 +268,43 @@ class Target_Image(Image):
         except AttributeError:
             return False
 
+    def _binned_data(self):
+        binned = []
+        for bin_id in self._bin_ids:
+            bin_mask = self._bins == bin_id
+            bin_mask = torch.logical_and(bin_mask, ~self.mask)
+            weight = self.weight[bin_mask]
+            data = self._data[bin_mask]
+            weighted_mean = (data * weight).sum() / weight.sum()
+            binned.append(weighted_mean)
+        return torch.stack(binned)
+
+    @property
+    def binned_weight(self):
+        """The weights binned using the bins map, if it exists"""
+        if self.has_bins:
+            return self._binned_weight()
+        raise AttributeError("This image does not have bins")
+
+    def _binned_weight(self):
+        binned = []
+        for bin_id in self._bin_ids:
+            bin_mask = self._bins == bin_id
+            bin_mask = torch.logical_and(bin_mask, ~self.mask)
+            weight = self.weight[bin_mask]
+            binned.append(weight.mean())
+        return torch.stack(binned)
+
+    @property
+    def unbinned_weight(self):
+        """The weights binned using the bins map, if it exists, then unbinned back to a 2D image"""
+        if self.has_bins:
+            return self._unbinned_weight()
+        raise AttributeError("This image does not have bins")
+
+    def _unbinned_weight(self):
+        return self._unbin(self.binned_weight)
+
     def set_variance(self, variance):
         """
         Provide a variance tensor for the image. Variance is equal to :math:`\\sigma^2`. This should have the same shape as the data.
@@ -340,6 +377,8 @@ class Target_Image(Image):
             if isinstance(mask, torch.Tensor)
             else torch.as_tensor(mask, dtype=torch.bool, device=AP_config.ap_device)
         )
+        if self.has_bins:
+            self._bins[self._mask] = -1
 
     def to(self, dtype=None, device=None):
         """Converts the stored `Target_Image` data, variance, psf, etc to a
@@ -421,11 +460,16 @@ class Target_Image(Image):
                 dtype=AP_config.ap_dtype,
                 device=AP_config.ap_device,
             )
+        if self.has_bins:
+            bins = self.bins.unsqueeze(-1).expand(data.shape)
+        else:
+            bins = None
         return Jacobian_Image(
             parameters=parameters,
             target_identity=self.identity,
             data=data,
             header=self.header,
+            bins=bins,
             **kwargs,
         )
 
@@ -437,6 +481,7 @@ class Target_Image(Image):
             data=torch.zeros_like(self.data) if data is None else data,
             header=self.header,
             target_identity=self.identity,
+            bins=self.bins if self.has_bins else None,
             **kwargs,
         )
 

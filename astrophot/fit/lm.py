@@ -188,7 +188,13 @@ class LM(BaseOptimizer):
         # Geodesic acceleration is helpful in some scenarios. By default it is turned off. Set 1 for full acceleration, 0 for no acceleration.
         self.acceleration = kwargs.get("acceleration", 0.0)
         # Initialize optimizer attributes
-        self.Y = self.model.target[self.fit_window].flatten("data")
+        if self.model.target.has_bins:
+            self.data_attribute = "binned_data"
+            self.weight_attribute = "binned_weight"
+        else:
+            self.data_attribute = "data"
+            self.weight_attribute = "weight"
+        self.Y = self.model.target[self.fit_window].flatten(self.data_attribute)
 
         # 1 / (sigma^2)
         kW = kwargs.get("W", None)
@@ -197,7 +203,7 @@ class LM(BaseOptimizer):
                 kW, dtype=AP_config.ap_dtype, device=AP_config.ap_device
             ).flatten()
         elif model.target.has_variance:
-            self.W = self.model.target[self.fit_window].flatten("weight")
+            self.W = self.model.target[self.fit_window].flatten(self.weight_attribute)
         else:
             self.W = torch.ones_like(self.Y)
 
@@ -209,7 +215,7 @@ class LM(BaseOptimizer):
             fit_mask = fit_mask.flatten()
         if torch.sum(fit_mask).item() == 0:
             fit_mask = None
-        if model.target.has_mask:
+        if model.target.has_mask and not model.target.has_bins:
             mask = self.model.target[self.fit_window].flatten("mask")
             if fit_mask is not None:
                 mask = mask | fit_mask
@@ -253,8 +259,8 @@ class LM(BaseOptimizer):
         in chi2 is found. Used internally.
 
         """
-        Y0 = self.forward(parameters=self.current_state).flatten("data")
-        J = self.jacobian(parameters=self.current_state).flatten("data")
+        Y0 = self.forward(parameters=self.current_state).flatten(self.data_attribute)
+        J = self.jacobian(parameters=self.current_state).flatten(self.data_attribute)
         r = self._r(Y0, self.Y, self.W)
         self.hess = self._hess(J, self.W)
         self.grad = self._grad(J, self.W, Y0, self.Y)
@@ -274,7 +280,7 @@ class LM(BaseOptimizer):
             h = self._h(self.L, self.grad, self.hess)
 
             # Compute goedesic acceleration
-            Y1 = self.forward(parameters=self.current_state + d * h).flatten("data")
+            Y1 = self.forward(parameters=self.current_state + d * h).flatten(self.data_attribute)
 
             rh = self._r(Y1, self.Y, self.W)
 
@@ -287,7 +293,7 @@ class LM(BaseOptimizer):
 
             # Evaluate new step
             ha = h + a * self.acceleration
-            Y1 = self.forward(parameters=self.current_state + ha).flatten("data")
+            Y1 = self.forward(parameters=self.current_state + ha).flatten(self.data_attribute)
 
             # Compute and report chi^2
             chi2 = self._chi2(Y1.detach()).item()
@@ -417,10 +423,10 @@ class LM(BaseOptimizer):
         if natural:
             J = self.jacobian_natural(
                 parameters=self.model.parameters.vector_transform_rep_to_val(self.current_state)
-            ).flatten("data")
+            ).flatten(self.data_attribute)
         else:
-            J = self.jacobian(parameters=self.current_state).flatten("data")
-        Ypred = self.forward(parameters=self.current_state).flatten("data")
+            J = self.jacobian(parameters=self.current_state).flatten(self.data_attribute)
+        Ypred = self.forward(parameters=self.current_state).flatten(self.data_attribute)
         self.hess = self._hess(J, self.W)
         self.grad = self._grad(J, self.W, self.Y, Ypred)
 
@@ -442,7 +448,7 @@ class LM(BaseOptimizer):
 
         self._covariance_matrix = None
         self.loss_history = [
-            self._chi2(self.forward(parameters=self.current_state).flatten("data")).item()
+            self._chi2(self.forward(parameters=self.current_state).flatten(self.data_attribute)).item()
         ]
         self.L_history = [self.L]
         self.lambda_history = [self.current_state.detach().clone().cpu().numpy()]
