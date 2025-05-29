@@ -379,6 +379,7 @@ class Target_Image(Image):
         )
         if self.has_bins:
             self._bins[self._mask] = -1
+            self.set_bins(self._bins)
 
     def to(self, dtype=None, device=None):
         """Converts the stored `Target_Image` data, variance, psf, etc to a

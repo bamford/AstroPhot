@@ -381,10 +381,10 @@ class Image(object):
 
     def _unbin(self, binned_data):
         unbinned = torch.zeros_like(self.data)
-        for bin_id in self._bin_ids:
+        for idx, bin_id in enumerate(self._bin_ids):
             if bin_id >= 0:
                 bin_mask = self._bins == bin_id
-                bin_value = binned_data[bin_id]
+                bin_value = binned_data[idx]
                 unbinned += bin_mask * bin_value
         bin_mask = self._bins >= 0
         unbinned = unbinned.where(bin_mask, torch.nan)
