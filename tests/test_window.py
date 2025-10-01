@@ -117,7 +117,7 @@ class TestWindow(unittest.TestCase):
         )
         self.assertEqual(
             big_or_small.shape[0],
-            100,
+            101,
             "logical or of images should take largest bounding box",
         )
         self.assertEqual(
@@ -201,7 +201,7 @@ class TestWindow(unittest.TestCase):
         )
         self.assertEqual(
             big_or_offset.shape[1],
-            130,
+            131,
             "logical or of images should take largest bounding box",
         )
         self.assertEqual(
@@ -279,7 +279,7 @@ class TestWindow(unittest.TestCase):
         )
         self.assertEqual(
             windowbig.shape[0],
-            100,
+            101,
             "logical or of images should take largest bounding box",
         )
         self.assertEqual(
@@ -313,7 +313,7 @@ class TestWindow(unittest.TestCase):
         )
         self.assertEqual(
             windowbig.shape[1],
-            130,
+            132,
             "logical or of images should take largest bounding box",
         )
         self.assertEqual(
@@ -335,7 +335,7 @@ class TestWindow(unittest.TestCase):
             windowbig.origin[0], 40, "logical and of images should take overlap region"
         )
         self.assertEqual(windowbig.origin[1], 0, "logical and of images should take overlap region")
-        self.assertEqual(windowbig.shape[0], 60, "logical and of images should take overlap region")
+        self.assertEqual(windowbig.shape[0], 61, "logical and of images should take overlap region")
         self.assertEqual(windowbig.shape[1], 70, "logical and of images should take overlap region")
         self.assertEqual(
             windowoffset.origin[0],

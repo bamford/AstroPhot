@@ -321,7 +321,7 @@ def transfer_windows(windows, base_image, new_image):
                 .numpy()
             ),
             a_min=0,
-            a_max=np.array(new_image.shape) - 1,
+            a_max=np.array(new_image.shape.detach().cpu().numpy() if hasattr(new_image.shape, 'detach') else new_image.shape) - 1,
         )
         top_corner = np.clip(
             np.ceil(
@@ -333,7 +333,7 @@ def transfer_windows(windows, base_image, new_image):
                 .numpy()
             ),
             a_min=0,
-            a_max=np.array(new_image.shape) - 1,
+            a_max=np.array(new_image.shape.detach().cpu().numpy() if hasattr(new_image.shape, 'detach') else new_image.shape) - 1,
         )
         new_windows[w] = [
             [bottom_corner[0], top_corner[0]],

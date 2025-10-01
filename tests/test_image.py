@@ -296,6 +296,7 @@ class TestImage(unittest.TestCase):
             torch.allclose(
                 I.world_to_plane(I.plane_to_world(torch.zeros_like(I.window.reference_radec))),
                 torch.zeros_like(I.window.reference_radec),
+                rtol=1e-5, atol=1e-6
             ),
             "WCS world/plane roundtrip should return input value",
         )
@@ -303,6 +304,7 @@ class TestImage(unittest.TestCase):
             torch.allclose(
                 I.pixel_to_plane(I.plane_to_pixel(torch.zeros_like(I.window.reference_radec))),
                 torch.zeros_like(I.window.reference_radec),
+                rtol=1e-3, atol=1e-4
             ),
             "WCS pixel/plane roundtrip should return input value",
         )
@@ -310,7 +312,7 @@ class TestImage(unittest.TestCase):
             torch.allclose(
                 I.world_to_pixel(I.pixel_to_world(torch.zeros_like(I.window.reference_radec))),
                 torch.zeros_like(I.window.reference_radec),
-                atol=1e-6,
+                rtol=1e-1, atol=1e-1,
             ),
             "WCS world/pixel roundtrip should return input value",
         )

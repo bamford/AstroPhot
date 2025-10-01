@@ -193,10 +193,14 @@ class Window(WCS):
         if shape is None:
             self._pixel_shape = None
             return
-        self._pixel_shape = torch.as_tensor(shape, device=AP_config.ap_device)
-        self._pixel_shape = torch.round(self.pixel_shape).to(
-            dtype=torch.int32, device=AP_config.ap_device
-        )
+        # If shape is already a tensor, preserve its device and dtype
+        if isinstance(shape, torch.Tensor):
+            self._pixel_shape = torch.round(shape).to(dtype=torch.int32, device=shape.device)
+        else:
+            self._pixel_shape = torch.as_tensor(shape, device=AP_config.ap_device)
+            self._pixel_shape = torch.round(self.pixel_shape).to(
+                dtype=torch.int32, device=AP_config.ap_device
+            )
 
     @property
     def size(self):
@@ -228,7 +232,15 @@ class Window(WCS):
         if device is None:
             device = AP_config.ap_device
         super().to(dtype=dtype, device=device)
-        self.pixel_shape = self.pixel_shape.to(dtype=dtype, device=device)
+        
+        # Handle MPS to CPU conversion with float64 - convert to float32 first
+        if (self.pixel_shape.device.type == 'mps' and 
+            device == 'cpu' and 
+            dtype == torch.float64):
+            # Convert to float32 first, then to float64 on CPU
+            self.pixel_shape = self.pixel_shape.to(dtype=torch.float32, device=device).to(dtype=dtype)
+        else:
+            self.pixel_shape = self.pixel_shape.to(dtype=dtype, device=device)
 
     def rescale_pixel(self, scale, **kwargs):
         return self.copy(

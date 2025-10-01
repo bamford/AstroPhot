@@ -170,17 +170,24 @@ class WPCS:
           world_RA: Right ascension in degrees
           world_DEC: Declination in degrees
         """
+        # Convert constants to tensors with appropriate device and dtype
+        deg_to_rad_tensor = torch.tensor(deg_to_rad, device=world_RA.device, dtype=world_RA.dtype)
+        rad_to_arcsec_tensor = torch.tensor(rad_to_arcsec, device=world_RA.device, dtype=world_RA.dtype)
+        
+        # Ensure reference coordinates are on the same device as input
+        ref_radec = self._reference_radec.to(device=world_RA.device, dtype=world_RA.dtype)
+        
         return (
-            torch.cos(world_DEC * deg_to_rad)
-            * torch.sin((world_RA - self.reference_radec[0]) * deg_to_rad)
-            * rad_to_arcsec,
+            torch.cos(world_DEC * deg_to_rad_tensor)
+            * torch.sin((world_RA - ref_radec[0]) * deg_to_rad_tensor)
+            * rad_to_arcsec_tensor,
             (
-                torch.cos(self.reference_radec[1] * deg_to_rad) * torch.sin(world_DEC * deg_to_rad)
-                - torch.sin(self.reference_radec[1] * deg_to_rad)
-                * torch.cos(world_DEC * deg_to_rad)
-                * torch.cos((world_RA - self.reference_radec[0]) * deg_to_rad)
+                torch.cos(ref_radec[1] * deg_to_rad_tensor) * torch.sin(world_DEC * deg_to_rad_tensor)
+                - torch.sin(ref_radec[1] * deg_to_rad_tensor)
+                * torch.cos(world_DEC * deg_to_rad_tensor)
+                * torch.cos((world_RA - ref_radec[0]) * deg_to_rad_tensor)
             )
-            * rad_to_arcsec,
+            * rad_to_arcsec_tensor,
         )
 
     def _project_plane_to_world(self, plane_x, plane_y, rho, c):
@@ -193,28 +200,36 @@ class WPCS:
           rho: polar radius on tangent plane.
           c: coordinate term dependent on the projection.
         """
+        # Convert constants to tensors with appropriate device and dtype
+        deg_to_rad_tensor = torch.tensor(deg_to_rad, device=plane_x.device, dtype=plane_x.dtype)
+        arcsec_to_rad_tensor = torch.tensor(arcsec_to_rad, device=plane_x.device, dtype=plane_x.dtype)
+        rad_to_deg_tensor = torch.tensor(rad_to_deg, device=plane_x.device, dtype=plane_x.dtype)
+        
+        # Ensure reference coordinates are on the same device as input
+        ref_radec = self._reference_radec.to(device=plane_x.device, dtype=plane_x.dtype)
+        
         return (
             (
-                self._reference_radec[0] * deg_to_rad
+                ref_radec[0] * deg_to_rad_tensor
                 + torch.arctan2(
-                    plane_x * arcsec_to_rad * torch.sin(c),
-                    rho * torch.cos(self.reference_radec[1] * deg_to_rad) * torch.cos(c)
+                    plane_x * arcsec_to_rad_tensor * torch.sin(c),
+                    rho * torch.cos(ref_radec[1] * deg_to_rad_tensor) * torch.cos(c)
                     - plane_y
-                    * arcsec_to_rad
-                    * torch.sin(self.reference_radec[1] * deg_to_rad)
+                    * arcsec_to_rad_tensor
+                    * torch.sin(ref_radec[1] * deg_to_rad_tensor)
                     * torch.sin(c),
                 )
             )
-            * rad_to_deg,
+            * rad_to_deg_tensor,
             torch.arcsin(
-                torch.cos(c) * torch.sin(self.reference_radec[1] * deg_to_rad)
+                torch.cos(c) * torch.sin(ref_radec[1] * deg_to_rad_tensor)
                 + plane_y
-                * arcsec_to_rad
+                * arcsec_to_rad_tensor
                 * torch.sin(c)
-                * torch.cos(self.reference_radec[1] * deg_to_rad)
+                * torch.cos(ref_radec[1] * deg_to_rad_tensor)
                 / rho
             )
-            * rad_to_deg,
+            * rad_to_deg_tensor,
         )
 
     def _world_to_plane_gnomonic(self, world_RA, world_DEC):
@@ -419,8 +434,17 @@ class WPCS:
             dtype = AP_config.ap_dtype
         if device is None:
             device = AP_config.ap_device
-        self._reference_radec = self._reference_radec.to(dtype=dtype, device=device)
-        self._reference_planexy = self._reference_planexy.to(dtype=dtype, device=device)
+        
+        # Handle MPS to CPU conversion with float64 - convert to float32 first
+        if (self._reference_radec.device.type == 'mps' and 
+            device == 'cpu' and 
+            dtype == torch.float64):
+            # Convert to float32 first, then to float64 on CPU
+            self._reference_radec = self._reference_radec.to(dtype=torch.float32, device=device).to(dtype=dtype)
+            self._reference_planexy = self._reference_planexy.to(dtype=torch.float32, device=device).to(dtype=dtype)
+        else:
+            self._reference_radec = self._reference_radec.to(dtype=dtype, device=device)
+            self._reference_planexy = self._reference_planexy.to(dtype=dtype, device=device)
 
     def __str__(self):
         return f"WPCS reference_radec: {self.reference_radec.detach().cpu().tolist()}, reference_planexy: {self.reference_planexy.detach().cpu().tolist()}"
@@ -576,6 +600,9 @@ class PPCS:
         """
         if pixel_j is None:
             return torch.stack(self.pixel_to_plane(*pixel_i))
+        # Ensure all tensors are on the same device
+        pixel_i = pixel_i.to(device=self.pixelscale.device, dtype=self.pixelscale.dtype)
+        pixel_j = pixel_j.to(device=self.pixelscale.device, dtype=self.pixelscale.dtype)
         coords = torch.mm(
             self.pixelscale,
             torch.stack((pixel_i.reshape(-1), pixel_j.reshape(-1)))
@@ -691,9 +718,19 @@ class PPCS:
             dtype = AP_config.ap_dtype
         if device is None:
             device = AP_config.ap_device
-        self._pixelscale = self._pixelscale.to(dtype=dtype, device=device)
-        self._reference_imageij = self._reference_imageij.to(dtype=dtype, device=device)
-        self._reference_imagexy = self._reference_imagexy.to(dtype=dtype, device=device)
+        
+        # Handle MPS to CPU conversion with float64 - convert to float32 first
+        if (self._pixelscale.device.type == 'mps' and 
+            device == 'cpu' and 
+            dtype == torch.float64):
+            # Convert to float32 first, then to float64 on CPU
+            self._pixelscale = self._pixelscale.to(dtype=torch.float32, device=device).to(dtype=dtype)
+            self._reference_imageij = self._reference_imageij.to(dtype=torch.float32, device=device).to(dtype=dtype)
+            self._reference_imagexy = self._reference_imagexy.to(dtype=torch.float32, device=device).to(dtype=dtype)
+        else:
+            self._pixelscale = self._pixelscale.to(dtype=dtype, device=device)
+            self._reference_imageij = self._reference_imageij.to(dtype=dtype, device=device)
+            self._reference_imagexy = self._reference_imagexy.to(dtype=dtype, device=device)
 
     def __str__(self):
         return f"PPCS reference_imageij: {self.reference_imageij.detach().cpu().tolist()}, reference_imagexy: {self.reference_imagexy.detach().cpu().tolist()}"

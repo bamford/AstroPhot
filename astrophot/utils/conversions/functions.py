@@ -139,7 +139,7 @@ def sersic_I0_to_flux_torch(I0, n, R, q):
 
 
     """
-    return 2 * np.pi * I0 * q * n * R**2 * torch.exp(gammaln(2 * n))
+    return torch.tensor(2.0, device=I0.device, dtype=I0.dtype) * torch.pi * I0 * q * n * R**2 * torch.exp(gammaln(2 * n))
 
 
 def sersic_flux_to_I0_torch(flux, n, R, q):
@@ -162,7 +162,7 @@ def sersic_flux_to_I0_torch(flux, n, R, q):
 
 
     """
-    return flux / (2 * np.pi * q * n * R**2 * torch.exp(gammaln(2 * n)))
+    return flux / (torch.tensor(2.0, device=flux.device, dtype=flux.dtype) * torch.pi * q * n * R**2 * torch.exp(gammaln(2 * n)))
 
 
 def sersic_Ie_to_flux_torch(Ie, n, R, q):
@@ -186,7 +186,7 @@ def sersic_Ie_to_flux_torch(Ie, n, R, q):
     """
     bn = sersic_n_to_b(n)
     return (
-        2 * np.pi * Ie * R**2 * q * n * (torch.exp(bn) * bn ** (-2 * n)) * torch.exp(gammaln(2 * n))
+        torch.tensor(2.0, device=Ie.device, dtype=Ie.dtype) * torch.pi * Ie * R**2 * q * n * (torch.exp(bn) * bn ** (-2 * n)) * torch.exp(gammaln(2 * n))
     )
 
 
@@ -211,7 +211,7 @@ def sersic_flux_to_Ie_torch(flux, n, R, q):
     """
     bn = sersic_n_to_b(n)
     return flux / (
-        2 * np.pi * R**2 * q * n * (torch.exp(bn) * bn ** (-2 * n)) * torch.exp(gammaln(2 * n))
+        torch.tensor(2.0, device=flux.device, dtype=flux.dtype) * torch.pi * R**2 * q * n * (torch.exp(bn) * bn ** (-2 * n)) * torch.exp(gammaln(2 * n))
     )
 
 

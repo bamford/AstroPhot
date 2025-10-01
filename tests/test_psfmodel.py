@@ -45,7 +45,7 @@ class TestEigenPSF(unittest.TestCase):
         target = ap.image.PSF_Image(data=dat, pixelscale=target.pixelscale)
         basis = np.stack(
             list(
-                make_basic_gaussian_psf(N=51, sigma=s, rand=int(4923 * s)).data
+                make_basic_gaussian_psf(N=51, sigma=s, rand=int(4923 * s)).data.detach().cpu().numpy()
                 for s in np.linspace(8, 1, 5)
             )
         )

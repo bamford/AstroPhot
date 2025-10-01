@@ -162,7 +162,7 @@ def _sample_integrate(self, deep, reference, image, parameters, center):
             deep, image.header, parameters
         )  # fixme, error can be over 100% on initial sampling reference is invalid
         error = torch.abs((deep - reference))
-        select = error > (self.sampling_tolerance * ref)
+        select = error > (torch.tensor(self.sampling_tolerance, device=ref.device, dtype=ref.dtype) * ref)
         intdeep = grid_integrate(
             X=X[select],
             Y=Y[select],
@@ -174,7 +174,7 @@ def _sample_integrate(self, deep, reference, image, parameters, center):
             quad_level=self.integrate_quad_level,
             gridding=self.integrate_gridding,
             max_depth=self.integrate_max_depth,
-            reference=self.sampling_tolerance * ref,
+            reference=torch.tensor(self.sampling_tolerance, device=ref.device, dtype=ref.dtype) * ref,
         )
         deep[select] = intdeep
     else:
@@ -375,7 +375,7 @@ def _chunk_image_jacobian(
 
     pixel_shape = window.pixel_shape.detach().cpu().numpy()
     Ncells = np.int64(np.round(np.ceil(pixel_shape / self.image_chunksize)))
-    cellsize = np.int64(np.round(window.pixel_shape / Ncells))
+    cellsize = np.int64(np.round(window.pixel_shape.detach().cpu().numpy() / Ncells))
 
     for nx in range(Ncells[0]):
         for ny in range(Ncells[1]):
