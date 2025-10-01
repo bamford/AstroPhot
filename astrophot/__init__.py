@@ -111,7 +111,19 @@ def run_from_terminal() -> None:
     if args.dtype is not None:
         AP_config.dtype = torch.float64 if args.dtype == "float64" else torch.float32
     if args.device is not None:
-        AP_config.device = "cpu" if args.device == "cpu" else "cuda:0"
+        if args.device == "cpu":
+            AP_config.ap_device = "cpu"
+            AP_config.ap_dtype = torch.float64
+        elif args.device == "gpu":
+            if torch.cuda.is_available():
+                AP_config.ap_device = "cuda:0"
+                AP_config.ap_dtype = torch.float64
+            elif torch.backends.mps.is_available():
+                AP_config.ap_device = "mps:0"
+                AP_config.ap_dtype = torch.float32  # MPS only supports float32
+            else:
+                AP_config.ap_device = "cpu"
+                AP_config.ap_dtype = torch.float64
 
     if args.filename is None:
         raise RuntimeError(

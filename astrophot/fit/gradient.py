@@ -107,7 +107,7 @@ class Grad(BaseOptimizer):
         self.loss_history.append(loss.detach().cpu().item())
         self.lambda_history.append(np.copy(self.current_state.detach().cpu().numpy()))
         if (
-            self.iteration % int(self.max_iter / self.report_freq) == 0
+            self.iteration % max(1, int(self.max_iter / self.report_freq)) == 0
         ) or self.iteration == self.max_iter:
             if self.verbose > 0:
                 AP_config.ap_logger.info(f"iter: {self.iteration}, loss: {loss.item()}")

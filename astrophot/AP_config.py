@@ -4,8 +4,15 @@ import torch
 
 __all__ = ["ap_dtype", "ap_device", "ap_logger", "set_logging_output"]
 
-ap_dtype = torch.float64
-ap_device = "cuda:0" if torch.cuda.is_available() else "cpu"
+if torch.cuda.is_available():
+    ap_device = "cuda"
+    ap_dtype = torch.float64
+elif torch.backends.mps.is_available():
+    ap_device = "mps"
+    ap_dtype = torch.float32  # MPS only supports float32
+else:
+    ap_device = "cpu"
+    ap_dtype = torch.float64
 ap_verbose = 0
 
 logging.basicConfig(

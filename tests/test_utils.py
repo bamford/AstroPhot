@@ -33,7 +33,7 @@ class TestFFT(unittest.TestCase):
         )
 
         self.assertTrue(
-            np.all(np.isclose(convolved.detach().cpu().numpy(), scipy_convolve)),
+            np.all(np.isclose(convolved.detach().cpu().numpy(), scipy_convolve, rtol=1e-5, atol=1e-6)),
             "Should reproduce scipy convolve",
         )
 
@@ -87,7 +87,7 @@ class TestOptimize(unittest.TestCase):
             params=3,
             variance=2 * torch.ones(10, dtype=ap.AP_config.ap_dtype, device=ap.AP_config.ap_device),
         )
-        self.assertEqual(chi2_red.item(), 5 / 7, "Chi squared calculation incorrect")
+        self.assertAlmostEqual(chi2_red.item(), 5 / 7, places=6, msg="Chi squared calculation incorrect")
 
         # no variance
         # with mask
@@ -118,7 +118,7 @@ class TestOptimize(unittest.TestCase):
             torch.zeros(10, dtype=ap.AP_config.ap_dtype, device=ap.AP_config.ap_device),
             params=3,
         )
-        self.assertEqual(chi2_red.item(), 10 / 7, "Chi squared calculation incorrect")
+        self.assertAlmostEqual(chi2_red.item(), 10 / 7, places=6, msg="Chi squared calculation incorrect")
 
 
 class TestPSF(unittest.TestCase):
